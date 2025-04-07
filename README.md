@@ -37,10 +37,10 @@ An end-to-end real-time data and ML pipeline for predicting Air Quality Index (A
 ---
 
 ## PostgreSQL Tables
-
-1. **raw_data** – Unprocessed AQI data
-2. **feature_store** – Engineered features for ML model
-3. **predictions** – Final model predictions
+0. **air_quality_db** - DB Schema
+1. **air_quality_db.raw_data** – Unprocessed AQI data table
+2. **air_quality_db.feature_store** – Engineered features for ML model table
+3. **air_quality_db.predictions** – Final model predictions table
 
 ---
 
