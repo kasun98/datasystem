@@ -6,19 +6,9 @@ import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, hour, dayofweek, month, when, current_timestamp
 from pyspark.sql.types import StructType, StructField, StringType, IntegerType, FloatType, DoubleType, TimestampType
+from configs import KAFKA_TOPIC, DB_HOST, DB_NAME, DB_USER, DB_PASSWORD, RAW_DATA_TABLE_NAME, FEATURE_STORE_TABLE_NAME, PREDICTION_TABLE_NAME, MODEL_PREDICTION_ENDPOINT
 
-# Configuration
-RAW_DATA_TABLE_NAME = "air_quality_data"
-FEATURE_STORE_TABLE_NAME = "air_quality_feature_store"
-PREDICTIONS_TABLE_NAME = "air_quality_index_predictions"
-KAFKA_TOPIC = "air_quality_info"
-DB_NAME = "air_quality_db"
-DB_USER = "postgres"
-DB_PASSWORD = "2167"
-DB_HOST = "localhost"
-MODEL_PREDICTION_ENDPOINT = "http://localhost:5050/predict"
 FEATURES = ["pm1", "pm10", "pm25", "rh", "temp", "hour", "day_of_week", "month", "is_weekend", "temp_x_rh", "pm1_x_pm10", "pm1_x_pm25", "pm10_x_pm25"]
-
 
 def create_spark_connection():
     s_conn = None
@@ -131,18 +121,29 @@ def process_batch(batch_df, epoch_id):
         return
     
     # Write raw data
-    write_to_postgres_jdbc(batch_df, epoch_id, RAW_DATA_TABLE_NAME)
+    try:
+        write_to_postgres_jdbc(batch_df, epoch_id, RAW_DATA_TABLE_NAME)
+    except Exception as e:
+        logging.error(f"Failed to write raw data: {e}")
 
     # Transform for feature store
-    feature_df = transform_to_feature_store(batch_df)
-    write_to_postgres_jdbc(feature_df, epoch_id, FEATURE_STORE_TABLE_NAME)
+    try:
+        feature_df = transform_to_feature_store(batch_df)
+        write_to_postgres_jdbc(feature_df, epoch_id, FEATURE_STORE_TABLE_NAME)
+        pandas_df_ = feature_df.toPandas()
+        pandas_df = pandas_df_[FEATURES].copy()
+        pandas_df['is_weekend'] = pandas_df['is_weekend'].astype(int)
 
-    # Convert to Pandas and send to prediction API
-    pandas_df_ = feature_df.toPandas()
-    pandas_df = pandas_df_[FEATURES].copy()
-    pandas_df['is_weekend'] = pandas_df['is_weekend'].astype(int)
-    predictions = send_data_to_predict_api(pandas_df)
-    predicted_time = datetime.now()
+    except Exception as e:
+        logging.error(f"Failed to transform and write feature store data: {e}")
+
+    # send to prediction API
+    try:
+        predictions = send_data_to_predict_api(pandas_df)
+        predicted_time = datetime.now()
+    except Exception as e:
+        logging.error(f"Failed to send data to prediction API: {e}")
+        predictions = None
     
     if predictions is not None:
         # Parse predictions from the API response
@@ -164,7 +165,10 @@ def process_batch(batch_df, epoch_id):
 
         # Convert back to Spark DF and write predictions
         spark_predicted_df = spark.createDataFrame(final_predicted_df)
-        write_to_postgres_jdbc(spark_predicted_df, epoch_id, PREDICTIONS_TABLE_NAME)
+        try:
+            write_to_postgres_jdbc(spark_predicted_df, epoch_id, PREDICTION_TABLE_NAME)
+        except Exception as e:
+            logging.error(f"Failed to write predictions: {e}")
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)

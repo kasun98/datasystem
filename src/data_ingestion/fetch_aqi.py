@@ -11,7 +11,7 @@ producer = KafkaDataProducer(topic=KAFKA_TOPIC)
 
 
 API_URL = f"https://api.waqi.info/feed/{STATION}/?token={API_KEY}"
-TIME_INTERVAL = 60  # data fetch interval in seconds
+TIME_INTERVAL = 300  # data fetch interval in seconds
 
 def fetch_aqi():
     """Fetch AQI data from the API."""
