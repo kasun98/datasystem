@@ -164,10 +164,12 @@ mlflow ui --backend-store-uri "sqlite:///<replace_with_your_project_dir>/mlflow/
 
 ## Acknowledgments
 
--- WAQI API
--- Apache Spark, Airflow & Kafka
--- Confluent Platform
--- MLflow, Flask
+- WAQI API
+- Apache Spark, Airflow & Kafka
+- Confluent Platform
+- MLflow, Flask
+
+---
 
 ## Author
 
