@@ -58,7 +58,7 @@ An end-to-end real-time data and ML pipeline for predicting Air Quality Index (A
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/yourproject.git
+git clone https://github.com/kasun98/datasystem.git
 cd datasystem
 
 # Create and activate virtual environment
