@@ -6,7 +6,7 @@ An end-to-end real-time data and ML pipeline for predicting Air Quality Index (A
 
 ## Project Architecture
 
-![Architecture Diagram](path/to/your/architecture_diagram.jpg)
+![Architecture Diagram](https://github.com/kasun98/datasystem/blob/main/architecture_diagram.jpg)
 
 ---
 
