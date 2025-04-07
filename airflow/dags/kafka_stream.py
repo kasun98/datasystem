@@ -12,7 +12,7 @@
 # def fetch_aqi():
 #     import requests
 #     """Fetch AQI data from the API."""
-#     API_URL = f"https://api.waqi.info/feed/A132322/?token=00627c48e4351cd09ccb081b9879ab40cce3c7fa"
+#     API_URL = "https://api.waqi.info/feed/{STATION}/?token={API_KEY}" #replace with actual values
 #     response = requests.get(API_URL)
 #     if response.status_code == 200:
 #         data = response.json()
