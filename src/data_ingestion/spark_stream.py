@@ -79,12 +79,16 @@ def transform_to_feature_store(df):
         .withColumn("created_at", current_timestamp()) \
         .select("location_id", "date", "pm1", "pm10", "pm25", "rh", "temp", "hour", "day_of_week", "month", "is_weekend", "temp_x_rh", "pm1_x_pm10", "pm1_x_pm25", "pm10_x_pm25", "created_at")
 
-def send_data_to_predict_api(df_pandas):
+
+def send_data_to_predict_api(spark_row_df):
+    row_data = spark_row_df.collect()[0].asDict()
     payload = {
-        "columns": df_pandas.columns.tolist(),
-        "data": df_pandas.values.tolist()
+        "columns": list(row_data.keys()),
+        "data": [list(row_data.values())]
     }
+
     logging.info(f"Payload for prediction: {payload}")
+
     try:
         response = requests.post(MODEL_PREDICTION_ENDPOINT, json=payload)
         if response.status_code == 200:
@@ -95,8 +99,8 @@ def send_data_to_predict_api(df_pandas):
     except requests.exceptions.RequestException as e:
         logging.error(f"Error sending request to prediction API: {e}")
         return None
-    
 
+    
 def write_to_postgres_jdbc(batch_df, epoch_id, table_name):
     if batch_df.isEmpty():
         logging.info(f"Empty batch, skipping write operation for {table_name}.")
@@ -130,43 +134,48 @@ def process_batch(batch_df, epoch_id):
     try:
         feature_df = transform_to_feature_store(batch_df)
         write_to_postgres_jdbc(feature_df, epoch_id, FEATURE_STORE_TABLE_NAME)
-        pandas_df_ = feature_df.toPandas()
-        pandas_df = pandas_df_[FEATURES].copy()
-        pandas_df['is_weekend'] = pandas_df['is_weekend'].astype(int)
+        # Select only required features
+        spark_df_ = feature_df.select(*FEATURES).limit(1)
+        spark_df = feature_df.select(*FEATURES, "location_id", "date").limit(1)
+        # Cast 'is_weekend' to IntegerType if not already
+        from pyspark.sql.types import IntegerType
+        spark_df = spark_df.withColumn("is_weekend", col("is_weekend").cast(IntegerType()))
+
 
     except Exception as e:
         logging.error(f"Failed to transform and write feature store data: {e}")
 
     # send to prediction API
     try:
-        predictions = send_data_to_predict_api(pandas_df)
+        predictions = send_data_to_predict_api(spark_df_)
         predicted_time = datetime.now()
     except Exception as e:
         logging.error(f"Failed to send data to prediction API: {e}")
         predictions = None
     
     if predictions is not None:
-        # Parse predictions from the API response
         prediction_values = predictions.get('prediction', [])[0]
         logging.info(f"Predictions: {prediction_values}")
-        
-        # Add the predictions to the dataframe
-        final_predicted_df = pd.DataFrame({
-            "location_id": pandas_df_["location_id"],
-            "date": pandas_df_["date"],
-            "predicted_at": predicted_time,
-            "pm25_t_5min": prediction_values[0],
-            "pm25_t_10min": prediction_values[1],
-            "pm25_t_15min": prediction_values[2],
-            "pm25_t_20min": prediction_values[3],
-            "pm25_t_25min": prediction_values[4],
-            "pm25_t_30min": prediction_values[5]
-        })
 
-        # Convert back to Spark DF and write predictions
-        spark_predicted_df = spark.createDataFrame(final_predicted_df)
+        # Extract metadata values from the single row
+        row_data = spark_df.collect()[0]
+        location_id_val = row_data["location_id"]
+        date_val = row_data["date"]
+
+        # Build final prediction DataFrame using Spark
+        prediction_data = [(location_id_val, date_val, predicted_time,
+                            prediction_values[0], prediction_values[1], prediction_values[2],
+                            prediction_values[3], prediction_values[4], prediction_values[5])]
+
+        schema = ["location_id", "date", "predicted_at",
+                "pm25_t_5min", "pm25_t_10min", "pm25_t_15min",
+                "pm25_t_20min", "pm25_t_25min", "pm25_t_30min"]
+
+        spark_predicted_df = spark.createDataFrame(prediction_data, schema)
+
         try:
             write_to_postgres_jdbc(spark_predicted_df, epoch_id, PREDICTION_TABLE_NAME)
+
         except Exception as e:
             logging.error(f"Failed to write predictions: {e}")
 
